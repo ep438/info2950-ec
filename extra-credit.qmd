@@ -1,0 +1,151 @@
+---
+title: "Extra credit"
+subtitle: "INFO 2950 - Spring 2023"
+author: "Elisabeth Pan"
+date: "5/10/23"
+format: pdf
+editor: visual
+---
+
+## Setup
+
+Load packages and data:
+
+```{r}
+#| label: load-packages
+
+library(tidyverse)
+library(scales)
+library(tidymodels)
+
+childcare_costs <- readr::read_csv(
+  'https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2023/2023-05-09/childcare_costs.csv')
+counties <- readr::read_csv(
+  'https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2023/2023-05-09/counties.csv')
+```
+
+## Introduction
+
+This dataset provides information regarding childcare prices (for both family based and center-based childcare) in different states and counties of the US from 2008 to 2018.
+
+```{r}
+#| label: prep-data
+
+#join data
+cdata <- inner_join(x = childcare_costs, y = counties)
+
+#CDC defined US regions
+northeast <- c("Connecticut", "Maine", "Massachusetts", "New Hampshire", 
+               "New Jersey", "New York", "Pennsylvania", "Rhode Island",
+               "Vermont")
+midwest <- c("Illinois", "Indiana", "Iowa", "Kansas", "Michigan", 
+             "Minnesota", "Missouri", "Nebraska", "North Dakota", 
+             "Ohio", "South Dakota", "Wisconsin")
+south <- c("Alabama", "Arkansas", "Delaware", "District of Columbia", 
+           "Florida", "Georgia", "Kentucky", "Louisiana", "Maryland",
+           "Mississippi", "North Carolina", "Oklahoma", "South Carolina",
+           "Tennessee", "Texas", "Virginia", "West Virginia")
+west <- c("Alaska", "Arizona", "California", "Colorado", "Hawaii", 
+          "Idaho", "Montana", "Nevada", "New Mexico", "Oregon", "Utah",
+          "Washington", "Wyoming")
+
+#add column for each state's corresponding region
+cdata <- cdata |>
+  mutate(region=case_when(
+    state_name %in% northeast ~ "Northeast",
+    state_name %in% midwest ~ "Midwest",
+    state_name %in% south ~ "South",
+    state_name %in% west ~ "West"
+  )) |>
+  mutate(avg_costs=(mcsa*mfccsa)/2)
+
+#child care costs in 2018
+cdata_2018 <- cdata |>
+  filter(study_year=="2018") |>
+  select(mhi_2018, mfccsa, mcsa, county_name, state_name, region, avg_costs)
+```
+
+## Research Questions
+
+### Question 1
+
+1.  What is the relationship between median family childcare costs and median center-based childcare costs in 2018 by US Region?
+
+```{r}
+#| label: mcsa-mfccsa-boxplots
+
+cdata_2018_longer <- cdata_2018 |>
+  pivot_longer(!c(mhi_2018, county_name, state_name, region, avg_costs),
+               names_to = "childcare_type", values_to = "cost") |>
+  mutate(childcare_type=ifelse(childcare_type=="mfccsa", "Family Childcare",
+                               "Center-based care"))
+
+ggplot(data=cdata_2018_longer, 
+         mapping=aes(x=cost, y=childcare_type)) +
+  geom_boxplot() +
+  scale_x_continuous(labels = label_dollar()) +
+  labs(
+    x="Median Childcare Costs",
+    y="Type of Childcare",
+    title="Side-by-side Boxplots of Median Costs by Type of Childcare 
+in the US in 2018",
+  ) +
+  theme_minimal()
+```
+
+The purpose of this visualization is to examine the difference in costs of family childcare and center-based childcare. I chose to use a side-by-side boxplot as it is able to visually compare the difference in median childcare costs between the two types of child care. From this plot, it is evident that US families paid slightly more for center-based childcare than family childcare in 2018.
+
+### Question 2
+
+2.  What is the relationship between median household income and median childcare costs in 2018 by US Region?
+
+```{r}
+#| label: income-childcare-costs
+
+income_cc_fit <- linear_reg() |>
+  fit(avg_costs ~ mhi_2018, data = cdata_2018)
+
+tidy(income_cc_fit)
+
+ggplot(data=cdata_2018, 
+         mapping=aes(x=mhi_2018, y=avg_costs, color=region)) +
+  geom_point(alpha=0.3) +
+  geom_smooth(method = "lm") +
+  scale_x_continuous(labels = label_dollar()) +
+  scale_y_continuous(labels = label_dollar()) +
+  labs(
+    x="Median Household Income",
+    y="Average Childcare Costs",
+    title="Interaction Model of Average Childcare Costs 
+and Household Income in 2018 by US Region",
+    color="Region"
+  ) +
+  scale_color_viridis_d(option = "D")
+```
+
+The purpose of this visualization is to explore the relationship between median household income and average childcare costs in 2018 by the four US regions. To do so, I categorized each state into one of four CDC defined US regions. I also took the average of the costs of the two types of childcare in each county to obtain the average childcare cost. I chose to use an interaction model to visualize the effect of not only income on childcare costs but also the effect of which region each family lives in on the childcare costs. From this graph, it can be concluded that the higher the median household income, the higher the average childcare costs and families paid from most to least childcare costs in the Northeast region, West region, South region, and Midwest region, respectively.
+
+### Question 3
+
+3.  How do childcare costs change from 2008-2018?
+
+```{r}
+#| label: line-graph
+
+cdata_year <- cdata |>
+  aggregate(avg_costs ~ study_year, mean) 
+
+cdata_year |>
+  ggplot(mapping=aes(x=study_year, y=avg_costs)) +
+  geom_line() +
+  scale_x_continuous(breaks = 2008:2018) +
+  scale_y_continuous(labels=label_dollar()) +
+  theme_minimal() +
+  labs(
+    x="Year",
+    y="Average Childcare Costs",
+    title="Average Childcare Costs in the US from 2008-2018"
+  )
+```
+
+The purpose of this visualization is to see how childcare costs have changed in the US from 2008 to 2018. I chose to use a line graph as it demonstrates how a variable changes over time. In this case, we can see that the average childcare costs in the US have steadily increased from 2008 to 2018.
